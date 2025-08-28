@@ -25,15 +25,13 @@ public class InventoryServiceImpl implements InventoryService {
 
     @KafkaListener(topics = "#{@paymentTopic.name}", groupId = "inventory-service")
     public void onPaymentEvent(PaymentSuccessEvent paymentSuccessEvent) {
-        boolean available = ThreadLocalRandom.current().nextDouble() > 0.2; // 80% available demo
 
         InventoryEntity inv = new InventoryEntity();
         inv.setOrderId(paymentSuccessEvent.getOrderId());
-        // In a real system you'd pass product & qty; we derive from OrderCreated normally.
-        inv.setProductId(1L);
-        inv.setQty(1);
+        inv.setProductId(paymentSuccessEvent.getProductId());
+        inv.setQty(paymentSuccessEvent.getQty());
 
-        if (available) {
+        if (paymentSuccessEvent.getQty() <= 50) {
             inv.setStatus(InventoryStatus.RESERVED);
             inventoryRepository.save(inv);
             kafkaTemplate.send(inventoryTopic, new InventoryReservedEvent(paymentSuccessEvent.getOrderId(), inv.getProductId(), inv.getQty()));

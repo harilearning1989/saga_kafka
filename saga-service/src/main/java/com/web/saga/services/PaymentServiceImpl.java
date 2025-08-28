@@ -26,16 +26,14 @@ public class PaymentServiceImpl implements PaymentService {
 
     @KafkaListener(topics = "#{@orderTopic.name}", groupId = "payment-service")
     public void onOrderCreated(OrderCreatedEvent event) {
-        boolean approved = ThreadLocalRandom.current().nextDouble() > 0.2; // 80% success demo
-
         PaymentEntity p = new PaymentEntity();
         p.setOrderId(event.getOrderId());
         p.setAmount(event.getAmount());
 
-        if (approved) {
+        if (event.getAmount() >= 10 && event.getAmount() <= 1000) {
             p.setStatus(PaymentStatus.SUCCESS);
             paymentRepo.save(p);
-            kafkaTemplate.send(paymentTopic, new PaymentSuccessEvent(event.getOrderId(), event.getAmount()));
+            kafkaTemplate.send(paymentTopic, new PaymentSuccessEvent(event.getOrderId(), event.getAmount(), event.getQty(), event.getProductId()));
         } else {
             p.setStatus(PaymentStatus.FAILED);
             paymentRepo.save(p);
@@ -45,15 +43,13 @@ public class PaymentServiceImpl implements PaymentService {
 
     // Compensation: refund when inventory fails after a successful payment
     @KafkaListener(topics = "#{@inventoryTopic.name}", groupId = "payment-service")
-    public void onInventoryFailed(Object payload) {
-        if (payload instanceof InventoryFailedEvent failed) {
-            PaymentEntity success = paymentRepo.findFirstByOrderIdAndStatus(failed.getOrderId(), PaymentStatus.SUCCESS);
-            if (success != null) {
-                success.setStatus(PaymentStatus.REFUNDED);
-                paymentRepo.save(success);
-                // Optionally emit a PaymentRefunded event for other services
-                // kafkaTemplate.send(paymentTopic, new PaymentRefundedEvent(failed.getOrderId(), success.getAmount()));
-            }
+    public void onInventoryFailed(InventoryFailedEvent inventoryFailedEvent) {
+        PaymentEntity success = paymentRepo.findFirstByOrderIdAndStatus(inventoryFailedEvent.getOrderId(), PaymentStatus.SUCCESS);
+        if (success != null) {
+            success.setStatus(PaymentStatus.REFUNDED);
+            paymentRepo.save(success);
+            // Optionally emit a PaymentRefunded event for other services
+            // kafkaTemplate.send(paymentTopic, new PaymentRefundedEvent(failed.getOrderId(), success.getAmount()));
         }
     }
 }

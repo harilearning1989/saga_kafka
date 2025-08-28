@@ -10,4 +10,6 @@ import lombok.*;
 public class PaymentSuccessEvent {
     private Long orderId;
     private Long amount;
+    private Integer qty;
+    private Long productId;
 }
